@@ -205,6 +205,72 @@ def centroid_distance(sel1, sel2, molid):
 	center2 = centroid_position(sel2, molid)
 	return np.linalg.norm(center2 - center1, axis=1)
 
+
+
+def centroid_position_z(sel, molid):
+    """
+    Computes the Z centroid at each timepoint.
+
+    Args:
+        sel (str): VMD atom selection.
+        molid (int): molecule ID.
+
+    Returns:
+        np.array(float): shape is (num frames,)
+    """
+    coords = get_coords(sel, molid)  # shape: T x N x 3
+    z_coords = coords[:, :, 2]       # shape: T x N
+    return np.mean(z_coords, axis=1) # shape: T
+
+
+def centroid_distance_z(sel1, sel2, molid):
+    """
+    Computes the Z-axis distance between the centroids of sel1 and sel2
+    at each timepoint.
+
+    Args:
+        sel1, sel2 (str): VMD atom selection.
+        molid (int): molecule ID.
+
+    Returns:
+        np.array(float): shape is (num frames,)
+    """
+    z1 = centroid_position_z(sel1, molid)  # shape: T
+    z2 = centroid_position_z(sel2, molid)  # shape: T
+    return np.abs(z2 - z1)                 # shape: T
+
+
+
+def centroid_position_noz(sel, molid):
+    """
+    Computes the XY centroid at each timepoint (ignores Z).
+
+    Args:
+        sel (str): VMD atom selection.
+        molid (int): molecule ID.
+    Returns:
+        np.array(float): shape is (num frames, 2)
+    """
+    coords = get_coords(sel, molid)
+    xy_coords = coords[:, :, :2]  # Keep only x and y
+    return np.mean(xy_coords, axis=1)
+
+def centroid_distance_noz(sel1, sel2, molid):
+    """
+    Computes the 2D distance (ignoring Z) between the centroid of sel1 and sel2
+    at each timepoint.
+
+    Args:
+        sel1, sel2 (str): VMD atom selection.
+        molid (int): molecule ID.
+    Returns:
+        np.array(float): shape is (num frames,)
+    """
+    center1 = centroid_position_noz(sel1, molid)
+    center2 = centroid_position_noz(sel2, molid)
+    return np.linalg.norm(center2 - center1, axis=1)
+
+
 def min_distance(sel1, sel2, molid):
 	"""
 	Computes the minimum distance at each timepoint between atoms
@@ -219,6 +285,23 @@ def min_distance(sel1, sel2, molid):
 	coords1 = get_coords(sel1, molid)
 	coords2 = get_coords(sel2, molid)
 	return _min_distance(coords1, coords2)
+
+
+def min_z_distance(sel1, sel2, molid):
+        """
+        Computes the minimum distance at each timepoint between atoms
+        in sel1 and sel2.
+
+        Args:
+                sel1, sel2 (str): VMD atom selection.
+                molid (int): molecule ID.
+        Returns:
+                np.array(float): shape is (num frames,)
+        """
+        coords1 = get_coords(sel1, molid)
+        coords2 = get_coords(sel2, molid)
+        return _min_z_distance(coords1, coords2)
+
 
 def angle(sel1, sel2, sel3, molid):
 	"""
@@ -389,13 +472,16 @@ def angle_btwn_vector(sel1, sel2, refsel1, refsel2, molidref, molid):
 
         coords_2d_ref = np.stack(coords_2d_ref, axis=1)
         coords_2d_ref = np.squeeze(coords_2d_ref, axis=2)
-
+        ind = 133
+        print('index ', ind)
+        print('coords ', coords_2d[ind], 'coords ref ', coords_2d_ref[0])
             # Calculate vectors between points for each frame
         vectors_2d = coords_2d[:, 1] - coords_2d[:, 0]           # Vector sel2 - sel1 for each frame
         vectors_2d_ref = coords_2d_ref[:, 1] - coords_2d_ref[:, 0]  # Vector refsel2 - refsel1 for each frame
-        vectors_2d_ref = np.tile(vectors_2d_ref, (vectors_2d.shape[0], 1)) 
-        print(vectors_2d)
-        print(vectors_2d_ref)
+        if vectors_2d_ref.shape[0] ==1:
+                vectors_2d_ref = np.tile(vectors_2d_ref, (vectors_2d.shape[0], 1)) 
+        print('vector ',vectors_2d[ind])
+        print('ref vector ',vectors_2d_ref[ind])
         # Calculate angles between the vectors for each frame
         angle_diffs = []
         for i in range(vectors_2d.shape[0]):
@@ -434,6 +520,36 @@ def _min_distance(coords1, coords2):
 	
 	# min gives T
 	return distances.min(axis=(1, 2))
+
+
+
+def _min_z_distance(coords1, coords2):
+    """
+    Computes the minimum absolute distance between z-coordinates 
+    of atoms in `coords1` and `coords2` for each timepoint.
+
+    Args:
+        coords1, coords2 (np.array float): Arrays with dimensions
+            T timepoints x N1 atoms x 3
+            T timepoints x N2 atoms x 3
+
+    Returns:
+        np.array(float): 1-D array of minimum z-distances per timepoint (length T).
+    """
+    # Extract z-coordinates (last dimension index 2)
+    z1 = coords1[:, :, 2]  # shape: T x N1
+    z2 = coords2[:, :, 2]  # shape: T x N2
+
+    # Expand dims to compute pairwise z-differences: T x N1 x 1 and T x 1 x N2
+    z1 = np.expand_dims(z1, 2)  # T x N1 x 1
+    z2 = np.expand_dims(z2, 1)  # T x 1 x N2
+
+    # Compute absolute z-coordinate differences: T x N1 x N2
+    z_diff = np.abs(z1 - z2)
+
+    # Take minimum over all atom pairs: T
+    return z_diff.min(axis=(1, 2))
+
 
 def _angle(coords):
 	v1 = coords[:, 0] - coords[:, 1]
